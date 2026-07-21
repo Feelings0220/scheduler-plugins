@@ -252,17 +252,10 @@ func TestNewRejectsInvalidArgsBeforeCreatingCollector(t *testing.T) {
 	}
 }
 
-func TestNameAndSignPod(t *testing.T) {
+func TestName(t *testing.T) {
 	pl := newTestPlugin(metricsSnapshot(testNow, 20, 20), false, thresholds(60, 60))
 	if pl.Name() != Name {
 		t.Fatalf("Name() = %q, want %q", pl.Name(), Name)
-	}
-	fragments, status := pl.SignPod(context.Background(), testPod("250m", "200Mi"))
-	if !status.IsSuccess() {
-		t.Fatalf("SignPod() status = %v, want success", status)
-	}
-	if len(fragments) != 1 || fragments[0].Key != Name+"/requests" {
-		t.Fatalf("SignPod() fragments = %#v, want one requests fragment", fragments)
 	}
 }
 

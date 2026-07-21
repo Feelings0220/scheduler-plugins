@@ -31,6 +31,7 @@ import (
 	resourcehelper "k8s.io/component-helpers/resource"
 	"k8s.io/klog/v2"
 	fwk "k8s.io/kube-scheduler/framework"
+	"k8s.io/kubernetes/pkg/scheduler/framework"
 
 	pluginconfig "sigs.k8s.io/scheduler-plugins/apis/config"
 	configvalidation "sigs.k8s.io/scheduler-plugins/apis/config/validation"
@@ -75,13 +76,12 @@ type HighLoadFilter struct {
 }
 
 var (
-	_ fwk.PreFilterPlugin = &HighLoadFilter{}
-	_ fwk.FilterPlugin    = &HighLoadFilter{}
-	_ fwk.SignPlugin      = &HighLoadFilter{}
+	_ framework.PreFilterPlugin = &HighLoadFilter{}
+	_ framework.FilterPlugin    = &HighLoadFilter{}
 )
 
 // New creates a HighLoadFilter plugin.
-func New(ctx context.Context, obj runtime.Object, _ fwk.Handle) (fwk.Plugin, error) {
+func New(ctx context.Context, obj runtime.Object, _ framework.Handle) (framework.Plugin, error) {
 	logger := klog.FromContext(ctx).WithValues("plugin", Name)
 	args, ok := obj.(*pluginconfig.HighLoadFilterArgs)
 	if !ok {
@@ -121,7 +121,7 @@ func (pl *HighLoadFilter) Name() string {
 
 // PreFilter captures one immutable metrics snapshot and the incoming Pod's
 // requests for the whole scheduling cycle.
-func (pl *HighLoadFilter) PreFilter(_ context.Context, state fwk.CycleState, pod *corev1.Pod, _ []fwk.NodeInfo) (*fwk.PreFilterResult, *fwk.Status) {
+func (pl *HighLoadFilter) PreFilter(_ context.Context, state fwk.CycleState, pod *corev1.Pod, _ []fwk.NodeInfo) (*framework.PreFilterResult, *fwk.Status) {
 	snapshot := pl.source.Snapshot()
 	preState := &preFilterState{
 		metrics:     snapshot,
@@ -143,7 +143,7 @@ func (pl *HighLoadFilter) PreFilter(_ context.Context, state fwk.CycleState, pod
 
 // PreFilterExtensions returns nil because the snapshot and Pod requests do not
 // need incremental updates during preemption simulation.
-func (pl *HighLoadFilter) PreFilterExtensions() fwk.PreFilterExtensions {
+func (pl *HighLoadFilter) PreFilterExtensions() framework.PreFilterExtensions {
 	return nil
 }
 
@@ -202,24 +202,6 @@ func (pl *HighLoadFilter) Filter(ctx context.Context, state fwk.CycleState, pod 
 		return pl.metricsUnavailableStatus(ErrReasonMetricsUnavailable)
 	}
 	return nil
-}
-
-// SignPod allows scheduler batching only for Pods with identical CPU and
-// memory requests, which are the Pod fields that influence this plugin.
-func (pl *HighLoadFilter) SignPod(_ context.Context, pod *corev1.Pod) ([]fwk.SignFragment, *fwk.Status) {
-	requests := resourcehelper.PodRequests(pod, resourcehelper.PodResourcesOptions{})
-	cpu := requests[corev1.ResourceCPU]
-	memory := requests[corev1.ResourceMemory]
-	return []fwk.SignFragment{{
-		Key: Name + "/requests",
-		Value: struct {
-			MilliCPU    int64 `json:"milliCPU"`
-			MemoryBytes int64 `json:"memoryBytes"`
-		}{
-			MilliCPU:    cpu.MilliValue(),
-			MemoryBytes: memory.Value(),
-		},
-	}}, nil
 }
 
 func (pl *HighLoadFilter) metricsUnavailableStatus(reason string) *fwk.Status {
